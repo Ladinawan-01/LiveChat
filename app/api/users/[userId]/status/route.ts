@@ -3,11 +3,11 @@ import connectDB from "@/lib/database"
 import User from "@/models/User"
 
 // PUT /api/users/[userId]/status - Update user online status
-export async function PUT(request: NextRequest, { params }: { params: { userId: string } }) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ userId: string }> }) {
   try {
     await connectDB()
 
-    const { userId } = params
+    const { userId } = await params
     const body = await request.json()
     const { isOnline } = body
 

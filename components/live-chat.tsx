@@ -100,18 +100,28 @@ export function LiveChat({ onClose }: LiveChatProps) {
       })
 
       // Listen for user join/leave
-      socket.on('user:joined', (user: ChatUser) => {
+      socket.on('user:joined', (user: SocketUser) => {
         setOnlineUsers(prev => {
-          const exists = prev.find(u => u._id === user._id)
+          const exists = prev.find(u => u._id === user.userId)
           if (!exists) {
-            return [...prev, user]
+            // Convert SocketUser to ChatUser format
+            const chatUser: ChatUser = {
+              _id: user.userId,
+              username: user.username,
+              avatar: user.avatar,
+              isOnline: true,
+              lastSeen: new Date(),
+              createdAt: new Date(),
+              updatedAt: new Date()
+            }
+            return [...prev, chatUser]
           }
           return prev
         })
       })
 
-      socket.on('user:left', (user: ChatUser) => {
-        setOnlineUsers(prev => prev.filter(u => u._id !== user._id))
+      socket.on('user:left', (user: SocketUser) => {
+        setOnlineUsers(prev => prev.filter(u => u._id !== user.userId))
       })
 
       // Listen for typing indicators
@@ -129,8 +139,18 @@ export function LiveChat({ onClose }: LiveChatProps) {
       })
 
       // Listen for online users
-      socket.on('users:online', (users: ChatUser[]) => {
-        setOnlineUsers(users)
+      socket.on('users:online', (users: SocketUser[]) => {
+        // Convert SocketUser[] to ChatUser[]
+        const chatUsers: ChatUser[] = users.map(user => ({
+          _id: user.userId,
+          username: user.username,
+          avatar: user.avatar,
+          isOnline: true,
+          lastSeen: new Date(),
+          createdAt: new Date(),
+          updatedAt: new Date()
+        }))
+        setOnlineUsers(chatUsers)
       })
 
       return () => {
