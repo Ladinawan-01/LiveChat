@@ -165,9 +165,14 @@ export function LiveChat({ onClose }: LiveChatProps) {
 
   // Handle user join
   const handleUserJoin = async () => {
-    if (!username.trim()) return
+    console.log("handleUserJoin called with username:", username, "trimmed:", username.trim())
+    if (!username.trim()) {
+      console.log("Username is empty, returning early")
+      return
+    }
 
     try {
+      console.log("Making API call to join chat...")
       const response = await fetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -175,6 +180,7 @@ export function LiveChat({ onClose }: LiveChatProps) {
       })
 
       const data = await response.json()
+      console.log("API response:", data)
       if (data.success) {
         setCurrentUser(data.user)
         setShowUserJoin(false)
@@ -262,7 +268,10 @@ export function LiveChat({ onClose }: LiveChatProps) {
             <Input
               id="username"
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              onChange={(e) => {
+                console.log("Username changed:", e.target.value, "Length:", e.target.value.length)
+                setUsername(e.target.value)
+              }}
               placeholder="Your username"
               onKeyPress={(e) => e.key === 'Enter' && handleUserJoin()}
               maxLength={30}
@@ -273,7 +282,7 @@ export function LiveChat({ onClose }: LiveChatProps) {
             disabled={!username.trim()}
             className="w-full"
           >
-            Join Chat
+            Join Chat {username.trim() ? `(${username.trim()})` : '(Disabled)'} - Length: {username.length}
           </Button>
         </CardContent>
       </Card>
