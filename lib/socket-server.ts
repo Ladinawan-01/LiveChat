@@ -105,6 +105,7 @@ class SocketServer {
 
           // Join user to general room
           socket.join("chat")
+          console.log("[Socket.IO] User joined chat room:", username)
 
           // Broadcast user joined
           socket.broadcast.emit("user:joined", socketUser)
@@ -114,6 +115,7 @@ class SocketServer {
           socket.emit("users:online", onlineUsers)
 
           console.log("[Socket.IO] User joined:", username)
+          console.log("[Socket.IO] Total connected users:", this.connectedUsers.size)
         } catch (error) {
           console.error("[Socket.IO] Error handling user join:", error)
           socket.emit("connection:status", { 
@@ -126,11 +128,17 @@ class SocketServer {
       // Handle sending messages
       socket.on("message:send", async (data: { content: string; sender: string; senderName: string }) => {
         try {
+          console.log("[Socket.IO] Received message data:", data)
+          
           await connectDB()
+          console.log("[Socket.IO] Database connected, saving message...")
 
           const { content, sender, senderName } = data
 
-          if (!content.trim()) return
+          if (!content.trim()) {
+            console.log("[Socket.IO] Empty message content, skipping...")
+            return
+          }
 
           // Save message to database
           const newMessage = new Message({
@@ -142,10 +150,17 @@ class SocketServer {
             isRead: false,
           })
 
+          console.log("[Socket.IO] Attempting to save message:", {
+            content: newMessage.content,
+            sender: newMessage.sender,
+            senderName: newMessage.senderName
+          })
+
           const savedMessage = await newMessage.save()
+          console.log("[Socket.IO] Message saved successfully:", savedMessage._id)
 
           // Broadcast message to all users in chat room
-          this.io?.to("chat").emit("message:new", {
+          const messageData = {
             _id: savedMessage._id,
             content: savedMessage.content,
             sender: savedMessage.sender,
@@ -153,11 +168,21 @@ class SocketServer {
             timestamp: savedMessage.timestamp,
             messageType: savedMessage.messageType,
             isRead: savedMessage.isRead,
-          })
+          }
+          
+          console.log("[Socket.IO] Broadcasting message to chat room:", messageData)
+          this.io?.to("chat").emit("message:new", messageData)
+          
+          // Also emit to the sender to confirm
+          socket.emit("message:new", messageData)
 
-          console.log("[Socket.IO] Message sent by:", senderName)
+          console.log("[Socket.IO] Message broadcasted by:", senderName)
         } catch (error) {
           console.error("[Socket.IO] Error handling message send:", error)
+          console.error("[Socket.IO] Error details:", {
+            message: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined
+          })
         }
       })
 

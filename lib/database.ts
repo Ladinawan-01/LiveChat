@@ -23,6 +23,7 @@ if (!cached) {
 
 async function connectDB() {
   if (cached!.conn) {
+    console.log("[MongoDB] Using cached connection")
     return cached!.conn
   }
 
@@ -31,14 +32,21 @@ async function connectDB() {
       bufferCommands: false,
     }
 
+    console.log("[MongoDB] Creating new connection...")
     cached!.promise = mongoose.connect(MONGODB_URI!, opts).then((mongoose) => {
+      console.log("[MongoDB] Connected successfully")
       return mongoose
+    }).catch((error) => {
+      console.error("[MongoDB] Connection error:", error)
+      throw error
     })
   }
 
   try {
     cached!.conn = await cached!.promise
+    console.log("[MongoDB] Connection established")
   } catch (e) {
+    console.error("[MongoDB] Failed to establish connection:", e)
     cached!.promise = null
     throw e
   }
