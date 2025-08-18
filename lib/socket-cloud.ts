@@ -43,7 +43,7 @@ class SocketCloudClient {
   connect(): Socket<ServerToClientEvents, ClientToServerEvents> {
     if (!this.socket || !this.socket.connected) {
       // Use Socket.IO Cloud URL from environment variable
-      const serverUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3001"
+      const serverUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3000"
 
       console.log("[Socket.IO Cloud] Connecting to:", serverUrl)
 

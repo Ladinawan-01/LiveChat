@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import connectDB from "@/lib/database"
 import Message from "@/models/Message"
-import { validateMessage, handleApiError } from "@/lib/utils"
+import { handleApiError } from "@/lib/utils"
 
 // GET /api/messages - Fetch chat messages
 export async function GET(request: NextRequest) {
@@ -26,8 +26,26 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(Number.parseInt(searchParams.get("limit") || "50"), 100)
     const page = Math.max(Number.parseInt(searchParams.get("page") || "1"), 1)
     const skip = (page - 1) * limit
+    const room = searchParams.get("room")
+    const sender = searchParams.get("sender")
+    const receiver = searchParams.get("receiver")
 
-    const messages = await Message.find({})
+    // Build query based on parameters
+    let query: any = {}
+    
+    if (room) {
+      query.room = room
+    }
+    
+    if (sender && receiver) {
+      // Private chat between two users
+      query.$or = [
+        { sender, receiver },
+        { sender: receiver, receiver: sender }
+      ]
+    }
+
+    const messages = await Message.find(query)
       .sort({ timestamp: -1 })
       .limit(limit)
       .skip(skip)
@@ -43,7 +61,7 @@ export async function GET(request: NextRequest) {
         page,
         limit,
         hasMore: messages.length === limit,
-        total: await Message.countDocuments(),
+        total: await Message.countDocuments(query),
       },
     })
   } catch (error) {
@@ -66,10 +84,10 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { content, sender, senderName } = body
+    const { sender, receiver, room, text } = body
 
     // Validate required fields
-    if (!sender || !senderName) {
+    if (!sender || !text) {
       return NextResponse.json(
         { success: false, error: "Missing required fields" },
         { status: 400 }
@@ -77,21 +95,27 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate message content
-    const validation = validateMessage(content)
-    if (!validation.isValid) {
+    if (!text.trim()) {
       return NextResponse.json(
-        { success: false, error: validation.error },
+        { success: false, error: "Message cannot be empty" },
+        { status: 400 }
+      )
+    }
+
+    // Validate that either room or receiver is provided
+    if (!room && !receiver) {
+      return NextResponse.json(
+        { success: false, error: "Either room or receiver must be specified" },
         { status: 400 }
       )
     }
 
     const newMessage = new Message({
-      content: content.trim(),
       sender,
-      senderName,
+      receiver,
+      room,
+      text: text.trim(),
       timestamp: new Date(),
-      messageType: "text",
-      isRead: false,
     })
 
     const savedMessage = await newMessage.save()

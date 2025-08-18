@@ -12,14 +12,14 @@ The current Socket.IO implementation has limitations when deploying to Vercel du
 
 ### Option 1: Local Development (Current Setup)
 
-For local development, the current setup works by running a separate Socket.IO server on port 3001.
+For local development, the current setup works by running Socket.IO server on the same port as Next.js (port 3000).
 
 **To run locally:**
 ```bash
 npm run dev
 ```
 
-The Socket.IO server will start on port 3001 and the Next.js app on port 3000.
+The Socket.IO server and Next.js app both run on port 3000.
 
 ### Option 2: Production Deployment with External Socket.IO Service
 
@@ -62,7 +62,7 @@ NEXT_PUBLIC_SOCKET_URL=your-socket-io-cloud-url
 
 2. **Update socket-client.ts:**
 ```typescript
-const serverUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3001"
+const serverUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3000"
 ```
 
 3. **Deploy to Vercel:**
@@ -102,7 +102,7 @@ export const pusherClient = new PusherClient(
 
 ## Current Status
 
-- ✅ **Local Development**: Working with Socket.IO on port 3001
+- ✅ **Local Development**: Working with Socket.IO on port 3000
 - ❌ **Vercel Production**: WebSocket connections fail
 - 🔄 **Need External Service**: For production deployment
 
@@ -111,8 +111,8 @@ export const pusherClient = new PusherClient(
 To test the current setup locally:
 
 1. Make sure you're running on localhost
-2. The Socket.IO server will start on port 3001
-3. The client will connect to localhost:3001
+2. The Socket.IO server runs on port 3000
+3. The client connects to localhost:3000
 
 ## Next Steps
 
