@@ -42,62 +42,119 @@ const connectToDatabase = async () => {
   }
 }
 
+// Create models directly in server.js to avoid import issues
+const createMessageModel = () => {
+  const MessageSchema = new mongoose.Schema({
+    sender: {
+      type: String,
+      required: true,
+    },
+    receiver: {
+      type: String,
+      required: false,
+    },
+    room: {
+      type: String,
+      required: false,
+    },
+    text: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 1000,
+    },
+    timestamp: {
+      type: Date,
+      default: Date.now,
+    },
+  }, {
+    timestamps: true,
+  })
+
+  // Add indexes
+  MessageSchema.index({ timestamp: -1 })
+  MessageSchema.index({ sender: 1 })
+  MessageSchema.index({ receiver: 1 })
+  MessageSchema.index({ room: 1 })
+
+  return mongoose.models.Message || mongoose.model('Message', MessageSchema)
+}
+
+const createUserModel = () => {
+  const UserSchema = new mongoose.Schema({
+    username: {
+      type: String,
+      required: true,
+      unique: true,
+      trim: true,
+      minlength: 2,
+      maxlength: 30,
+    },
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      trim: true,
+      lowercase: true,
+      match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please enter a valid email'],
+    },
+    password: {
+      type: String,
+      required: true,
+      minlength: 6,
+    },
+    avatar: {
+      type: String,
+      default: null,
+    },
+    isOnline: {
+      type: Boolean,
+      default: false,
+    },
+    lastSeen: {
+      type: Date,
+      default: Date.now,
+    },
+    refreshToken: {
+      type: String,
+      default: null,
+    },
+  }, {
+    timestamps: true,
+  })
+
+  // Add indexes
+  UserSchema.index({ email: 1 })
+  UserSchema.index({ username: 1 })
+  UserSchema.index({ isOnline: 1 })
+
+  return mongoose.models.User || mongoose.model('User', UserSchema)
+}
+
 app.prepare().then(async () => {
   // Dynamically import ES modules
-  let Message, User, Server
+  let Server
   
   try {
     const socketIO = await import('socket.io')
     Server = socketIO.Server
     
-    // Import database modules - try different import strategies
-    let messageModule, userModule
-    
-    try {
-      messageModule = await import('./models/Message.js')
-    } catch {
-      try {
-        messageModule = await import('./models/Message.ts')
-      } catch {
-        try {
-          messageModule = require('./models/Message.js')
-        } catch {
-          console.log('Message module not found, using fallback')
-          messageModule = { default: null }
-        }
-      }
-    }
-    
-    try {
-      userModule = await import('./models/User.js')
-    } catch {
-      try {
-        userModule = await import('./models/User.ts')
-      } catch {
-        try {
-          userModule = require('./models/User.js')
-        } catch {
-          console.log('User module not found, using fallback')
-          userModule = { default: null }
-        }
-      }
-    }
-    
-    Message = messageModule.default || messageModule
-    User = userModule.default || userModule
-    
-    console.log('✅ All modules loaded successfully')
-    console.log('🔍 Environment check:')
-    console.log('  - NODE_ENV:', process.env.NODE_ENV)
-    console.log('  - MONGODB_URI:', process.env.MONGODB_URI ? 'Set' : 'Not set')
+    console.log('✅ Socket.IO imported successfully')
 
-    // Connect to database immediately
+    // Connect to database first
     const db = await connectToDatabase()
     if (!db) {
       throw new Error('Failed to connect to database')
     }
-
     console.log('✅ Database connected and verified successfully')
+
+    // Create models after database connection
+    const Message = createMessageModel()
+    const User = createUserModel()
+    
+    console.log('✅ Models created successfully')
+    console.log('  - Message model:', typeof Message)
+    console.log('  - User model:', typeof User)
 
   } catch (error) {
     console.error('Error importing modules or connecting to database:', error)
@@ -117,7 +174,7 @@ app.prepare().then(async () => {
   })
 
   // Initialize Socket.IO if modules are available
-  if (Server && Message && User) {
+  if (Server) {
     const io = new Server(server, {
       cors: {
         origin: process.env.NODE_ENV === "production" 
@@ -155,6 +212,10 @@ app.prepare().then(async () => {
           
           console.log("[Socket.IO] Database connection verified")
 
+          // Get models
+          const Message = createMessageModel()
+          const User = createUserModel()
+          
           const { userId, username, avatar } = data
 
           // Update user status in database
@@ -270,6 +331,9 @@ app.prepare().then(async () => {
             }
           }
 
+          // Get models
+          const Message = createMessageModel()
+
           const { sender, receiver, room, text } = data
 
           if (!text.trim()) {
@@ -371,6 +435,9 @@ app.prepare().then(async () => {
             console.warn("[Socket.IO] Database connection lost during disconnect")
             return
           }
+
+          // Get models
+          const User = createUserModel()
 
           // Update user status in database
           await User.findOneAndUpdate(
