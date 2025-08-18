@@ -151,7 +151,8 @@ export default function Home() {
     const userData = {
       userId: Date.now().toString(),
       username: username.trim(),
-      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${username.trim()}`
+      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${username.trim()}`,
+      socketId: socket.id || 'temp-id'
     }
 
     socket.emit("user:join", userData)
