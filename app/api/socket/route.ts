@@ -69,7 +69,13 @@ function setupSocketHandlers(io: ServerIO) {
     // Handle user joining
     socket.on("user:join", async (data: { userId: string; username: string; avatar?: string }) => {
       try {
-        await connectDB()
+        const db = await connectDB()
+        
+        // Skip database operations during build time
+        if (!db) {
+          console.warn("[Socket.IO] Database not available during build time")
+          return
+        }
 
         const { userId, username, avatar } = data
 
@@ -121,7 +127,14 @@ function setupSocketHandlers(io: ServerIO) {
       try {
         console.log("[Socket.IO] Received message data:", data)
         
-        await connectDB()
+        const db = await connectDB()
+        
+        // Skip database operations during build time
+        if (!db) {
+          console.warn("[Socket.IO] Database not available during build time")
+          return
+        }
+        
         console.log("[Socket.IO] Database connected, saving message...")
 
         const { content, sender, senderName } = data
@@ -180,7 +193,13 @@ function setupSocketHandlers(io: ServerIO) {
     // Handle typing start
     socket.on("typing:start", async (data: { userId: string; username: string }) => {
       try {
-        await connectDB()
+        const db = await connectDB()
+        
+        // Skip database operations during build time
+        if (!db) {
+          console.warn("[Socket.IO] Database not available during build time")
+          return
+        }
 
         const { userId, username } = data
 
@@ -208,7 +227,13 @@ function setupSocketHandlers(io: ServerIO) {
     // Handle typing stop
     socket.on("typing:stop", async (data: { userId: string; username: string }) => {
       try {
-        await connectDB()
+        const db = await connectDB()
+        
+        // Skip database operations during build time
+        if (!db) {
+          console.warn("[Socket.IO] Database not available during build time")
+          return
+        }
 
         const { userId, username } = data
 
@@ -249,7 +274,13 @@ async function handleUserDisconnect(socketId: string) {
   try {
     const user = connectedUsers.get(socketId)
     if (user) {
-      await connectDB()
+      const db = await connectDB()
+      
+      // Skip database operations during build time
+      if (!db) {
+        console.warn("[Socket.IO] Database not available during build time")
+        return
+      }
 
       // Update user status in database
       await User.findOneAndUpdate(

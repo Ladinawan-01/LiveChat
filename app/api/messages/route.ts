@@ -6,7 +6,21 @@ import { validateMessage, handleApiError } from "@/lib/utils"
 // GET /api/messages - Fetch chat messages
 export async function GET(request: NextRequest) {
   try {
-    await connectDB()
+    const db = await connectDB()
+    
+    // Skip database operations during build time
+    if (!db) {
+      return NextResponse.json({
+        success: true,
+        messages: [],
+        pagination: {
+          page: 1,
+          limit: 50,
+          hasMore: false,
+          total: 0,
+        },
+      })
+    }
 
     const { searchParams } = new URL(request.url)
     const limit = Math.min(Number.parseInt(searchParams.get("limit") || "50"), 100)
@@ -41,7 +55,15 @@ export async function GET(request: NextRequest) {
 // POST /api/messages - Send a new message
 export async function POST(request: NextRequest) {
   try {
-    await connectDB()
+    const db = await connectDB()
+    
+    // Skip database operations during build time
+    if (!db) {
+      return NextResponse.json({
+        success: false,
+        error: "Database not available during build time"
+      }, { status: 503 })
+    }
 
     const body = await request.json()
     const { content, sender, senderName } = body

@@ -6,7 +6,15 @@ import { validateUsername, handleApiError } from "@/lib/utils"
 // GET /api/users - Get all online users
 export async function GET() {
   try {
-    await connectDB()
+    const db = await connectDB()
+    
+    // Skip database operations during build time
+    if (!db) {
+      return NextResponse.json({
+        success: true,
+        users: [],
+      })
+    }
 
     const users = await User.find({ isOnline: true })
       .select("username avatar isOnline lastSeen")
@@ -26,7 +34,15 @@ export async function GET() {
 // POST /api/users - Create or update user
 export async function POST(request: NextRequest) {
   try {
-    await connectDB()
+    const db = await connectDB()
+    
+    // Skip database operations during build time
+    if (!db) {
+      return NextResponse.json({
+        success: false,
+        error: "Database not available during build time"
+      }, { status: 503 })
+    }
 
     const body = await request.json()
     const { username, avatar } = body

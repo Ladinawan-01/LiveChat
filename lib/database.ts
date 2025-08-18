@@ -2,8 +2,9 @@ import mongoose from "mongoose"
 
 const MONGODB_URI = process.env.MONGODB_URI
 
-if (!MONGODB_URI) {
-  throw new Error("Please define the MONGODB_URI environment variable inside .env.local")
+// During build time, MONGODB_URI might not be available
+if (!MONGODB_URI && process.env.NODE_ENV !== 'production') {
+  console.warn("[MongoDB] MONGODB_URI not defined. Database connection will be skipped during build.")
 }
 
 interface MongooseCache {
@@ -22,6 +23,16 @@ if (!cached) {
 }
 
 async function connectDB() {
+  // Skip database connection during build time if MONGODB_URI is not available
+  if (!MONGODB_URI) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error("Please define the MONGODB_URI environment variable inside .env.local")
+    } else {
+      console.warn("[MongoDB] Skipping database connection - MONGODB_URI not defined")
+      return null
+    }
+  }
+
   if (cached!.conn) {
     console.log("[MongoDB] Using cached connection")
     return cached!.conn
@@ -33,7 +44,7 @@ async function connectDB() {
     }
 
     console.log("[MongoDB] Creating new connection...")
-    cached!.promise = mongoose.connect(MONGODB_URI!, opts).then((mongoose) => {
+    cached!.promise = mongoose.connect(MONGODB_URI, opts).then((mongoose) => {
       console.log("[MongoDB] Connected successfully")
       return mongoose
     }).catch((error) => {

@@ -81,10 +81,6 @@ class SocketClient {
         }
       }
     })
-
-    this.socket.on("error", (error) => {
-      console.error("[Socket.IO Client] Socket error:", error)
-    })
   }
 
   disconnect() {

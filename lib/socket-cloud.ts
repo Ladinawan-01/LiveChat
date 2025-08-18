@@ -88,10 +88,6 @@ class SocketCloudClient {
         console.error("[Socket.IO Cloud] Max reconnection attempts reached")
       }
     })
-
-    this.socket.on("error", (error) => {
-      console.error("[Socket.IO Cloud] Socket error:", error)
-    })
   }
 
   disconnect() {
