@@ -63,7 +63,33 @@ export default function Home() {
 
   // Initialize Socket.IO connection
   useEffect(() => {
-    const socketInstance = io("https://live-chat-gamma-black.vercel.app/")
+    // Determine the correct server URL based on environment
+    let serverUrl: string
+    
+    if (typeof window !== 'undefined') {
+      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      
+      if (isLocalhost) {
+        // Local development - connect to local server
+        serverUrl = "http://localhost:3000"
+      } else {
+        // Production - use environment variable or fallback
+        serverUrl = process.env.NEXT_PUBLIC_SOCKET_URL || window.location.origin
+      }
+    } else {
+      // Server-side fallback
+      serverUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3000"
+    }
+
+    console.log("🔌 Connecting to Socket.IO server:", serverUrl)
+    const socketInstance = io(serverUrl, {
+      transports: ["polling", "websocket"],
+      autoConnect: true,
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+    })
+    
     setSocket(socketInstance)
 
     socketInstance.on("connect", () => {

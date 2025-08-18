@@ -22,17 +22,23 @@ app.prepare().then(async () => {
     const socketIO = await import('socket.io')
     Server = socketIO.Server
     
-    // Import database modules - try both .js and .ts extensions
+    // Import database modules - try different import strategies
     let databaseModule, messageModule, userModule
     
     try {
+      // Try importing as ES modules first
       databaseModule = await import('./lib/database.js')
     } catch {
       try {
         databaseModule = await import('./lib/database.ts')
       } catch {
-        console.log('Database module not found, using fallback')
-        databaseModule = { default: () => null }
+        try {
+          // Try with require for CommonJS
+          databaseModule = require('./lib/database.js')
+        } catch {
+          console.log('Database module not found, using fallback')
+          databaseModule = { default: () => null }
+        }
       }
     }
     
@@ -42,8 +48,12 @@ app.prepare().then(async () => {
       try {
         messageModule = await import('./models/Message.ts')
       } catch {
-        console.log('Message module not found, using fallback')
-        messageModule = { default: null }
+        try {
+          messageModule = require('./models/Message.js')
+        } catch {
+          console.log('Message module not found, using fallback')
+          messageModule = { default: null }
+        }
       }
     }
     
@@ -53,14 +63,20 @@ app.prepare().then(async () => {
       try {
         userModule = await import('./models/User.ts')
       } catch {
-        console.log('User module not found, using fallback')
-        userModule = { default: null }
+        try {
+          userModule = require('./models/User.js')
+        } catch {
+          console.log('User module not found, using fallback')
+          userModule = { default: null }
+        }
       }
     }
     
-    connectDB = databaseModule.default
-    Message = messageModule.default
-    User = userModule.default
+    connectDB = databaseModule.default || databaseModule
+    Message = messageModule.default || messageModule
+    User = userModule.default || userModule
+    
+    console.log('✅ All modules loaded successfully')
   } catch (error) {
     console.error('Error importing modules:', error)
     console.log('Starting server without Socket.IO support...')
@@ -84,7 +100,7 @@ app.prepare().then(async () => {
       cors: {
         origin: process.env.NODE_ENV === "production" 
           ? process.env.NEXT_PUBLIC_APP_URL || "*"
-          : ["https://live-chat-gamma-black.vercel.app/", "http://127.0.0.1:3000"],
+          : ["http://localhost:3000", "http://127.0.0.1:3000"],
         methods: ["GET", "POST"],
         credentials: true
       },
