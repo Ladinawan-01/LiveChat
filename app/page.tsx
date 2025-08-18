@@ -9,6 +9,9 @@ import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Label } from "@/components/ui/label"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { 
   Send, 
   Users, 
@@ -19,8 +22,13 @@ import {
   User,
   LogIn,
   LogOut,
-  Settings
+  Settings,
+  Mail,
+  Lock,
+  Eye,
+  EyeOff
 } from "lucide-react"
+import { AuthProvider, useAuth } from "@/contexts/AuthContext"
 
 interface Message {
   _id: string
@@ -31,26 +39,38 @@ interface Message {
   timestamp: Date
 }
 
-interface User {
+interface ChatUser {
   userId: string
   username: string
   avatar?: string
   socketId: string
 }
 
-export default function Home() {
+function ChatApp() {
+  const { user, login, register, logout, isLoading } = useAuth()
   const [socket, setSocket] = useState<any>(null)
   const [isConnected, setIsConnected] = useState(false)
-  const [currentUser, setCurrentUser] = useState<User | null>(null)
-  const [username, setUsername] = useState("")
-  const [showLogin, setShowLogin] = useState(true)
+  const [currentUser, setCurrentUser] = useState<ChatUser | null>(null)
+  
+  // Auth state
+  const [isLogin, setIsLogin] = useState(true)
+  const [authError, setAuthError] = useState("")
+  const [isLoadingAuth, setIsLoadingAuth] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  
+  // Form state
+  const [formData, setFormData] = useState({
+    username: "",
+    email: "",
+    password: "",
+  })
   
   // Chat state
   const [currentRoom, setCurrentRoom] = useState("general")
   const [roomInput, setRoomInput] = useState("")
   const [message, setMessage] = useState("")
   const [messages, setMessages] = useState<Message[]>([])
-  const [onlineUsers, setOnlineUsers] = useState<User[]>([])
+  const [onlineUsers, setOnlineUsers] = useState<ChatUser[]>([])
   const [typingUsers, setTypingUsers] = useState<string[]>([])
   const [showOnlineUsers, setShowOnlineUsers] = useState(false)
   
@@ -61,8 +81,10 @@ export default function Home() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const typingTimeoutRef = useRef<NodeJS.Timeout>()
 
-  // Initialize Socket.IO connection
+  // Initialize Socket.IO connection when user is authenticated
   useEffect(() => {
+    if (!user) return
+
     // Determine the correct server URL based on environment
     let serverUrl: string
     
@@ -70,14 +92,11 @@ export default function Home() {
       const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
       
       if (isLocalhost) {
-        // Local development - connect to local server
         serverUrl = "http://localhost:3000"
       } else {
-        // Production - use environment variable or fallback
         serverUrl = process.env.NEXT_PUBLIC_SOCKET_URL || window.location.origin
       }
     } else {
-      // Server-side fallback
       serverUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3000"
     }
 
@@ -95,6 +114,17 @@ export default function Home() {
     socketInstance.on("connect", () => {
       console.log("🟢 Connected to server")
       setIsConnected(true)
+      
+      // Join chat with authenticated user
+      const chatUser = {
+        userId: user._id,
+        username: user.username,
+        avatar: user.avatar,
+        socketId: socketInstance.id
+      }
+      
+      socketInstance.emit("user:join", chatUser)
+      setCurrentUser(chatUser)
     })
 
     socketInstance.on("disconnect", () => {
@@ -117,11 +147,11 @@ export default function Home() {
       }
     })
 
-    socketInstance.on("users:online", (users: User[]) => {
+    socketInstance.on("users:online", (users: ChatUser[]) => {
       setOnlineUsers(users)
     })
 
-    socketInstance.on("user:joined", (user: User) => {
+    socketInstance.on("user:joined", (user: ChatUser) => {
       setOnlineUsers(prev => {
         const exists = prev.find(u => u.userId === user.userId)
         if (!exists) {
@@ -131,7 +161,7 @@ export default function Home() {
       })
     })
 
-    socketInstance.on("user:left", (user: User) => {
+    socketInstance.on("user:left", (user: ChatUser) => {
       setOnlineUsers(prev => prev.filter(u => u.userId !== user.userId))
     })
 
@@ -163,27 +193,42 @@ export default function Home() {
     return () => {
       socketInstance.disconnect()
     }
-  }, [])
+  }, [user])
 
   // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages, privateMessages])
 
-  // Handle user login
-  const handleLogin = () => {
-    if (!username.trim() || !socket) return
+  // Handle form submission
+  const handleAuthSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setAuthError("")
+    setIsLoadingAuth(true)
 
-    const userData = {
-      userId: Date.now().toString(),
-      username: username.trim(),
-      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${username.trim()}`,
-      socketId: socket.id || 'temp-id'
+    try {
+      let result
+      
+      if (isLogin) {
+        result = await login(formData.email, formData.password)
+      } else {
+        result = await register(formData.username, formData.email, formData.password)
+      }
+
+      if (!result.success) {
+        setAuthError(result.error || "Authentication failed")
+      }
+    } catch (error) {
+      setAuthError("An unexpected error occurred")
+    } finally {
+      setIsLoadingAuth(false)
     }
+  }
 
-    socket.emit("user:join", userData)
-    setCurrentUser(userData)
-    setShowLogin(false)
+  // Handle form input changes
+  const handleInputChange = (field: string, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }))
+    setAuthError("")
   }
 
   // Handle joining room
@@ -194,7 +239,7 @@ export default function Home() {
     setCurrentRoom(roomInput.trim())
     setRoomInput("")
     setMessages([])
-    setSelectedUser(null) // Exit private chat
+    setSelectedUser(null)
   }
 
   // Handle sending message
@@ -202,14 +247,12 @@ export default function Home() {
     if (!message.trim() || !socket || !currentUser) return
 
     if (selectedUser) {
-      // Private message
       socket.emit("sendMessage", {
         sender: currentUser.userId,
         receiver: selectedUser,
         text: message.trim()
       })
     } else {
-      // Room message
       socket.emit("sendMessage", {
         sender: currentUser.userId,
         room: currentRoom,
@@ -266,8 +309,28 @@ export default function Home() {
     })
   }
 
-  // Login screen
-  if (showLogin) {
+  // Handle logout
+  const handleLogout = async () => {
+    await logout()
+    setCurrentUser(null)
+    setMessages([])
+    setOnlineUsers([])
+  }
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Authentication screen
+  if (!user) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
         <Card className="w-full max-w-md">
@@ -278,29 +341,162 @@ export default function Home() {
             </CardTitle>
             <p className="text-muted-foreground">Join the conversation</p>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <label htmlFor="username" className="text-sm font-medium">
-                Enter your username
-              </label>
-              <Input
-                id="username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Your username"
-                onKeyPress={(e) => e.key === 'Enter' && handleLogin()}
-                maxLength={30}
-              />
-            </div>
-            <Button 
-              onClick={handleLogin} 
-              disabled={!username.trim()}
-              className="w-full"
-              size="lg"
-            >
-              <LogIn className="h-4 w-4 mr-2" />
-              Join Chat
-            </Button>
+          <CardContent>
+            <Tabs value={isLogin ? "login" : "register"} onValueChange={(value) => setIsLogin(value === "login")}>
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="login">Login</TabsTrigger>
+                <TabsTrigger value="register">Register</TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="login" className="space-y-4">
+                <form onSubmit={handleAuthSubmit} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="email"
+                        type="email"
+                        value={formData.email}
+                        onChange={(e) => handleInputChange("email", e.target.value)}
+                        placeholder="Enter your email"
+                        className="pl-10"
+                        required
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="password">Password</Label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="password"
+                        type={showPassword ? "text" : "password"}
+                        value={formData.password}
+                        onChange={(e) => handleInputChange("password", e.target.value)}
+                        placeholder="Enter your password"
+                        className="pl-10 pr-10"
+                        required
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                        onClick={() => setShowPassword(!showPassword)}
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  {authError && (
+                    <Alert variant="destructive">
+                      <AlertDescription>{authError}</AlertDescription>
+                    </Alert>
+                  )}
+                  
+                  <Button type="submit" className="w-full" disabled={isLoadingAuth}>
+                    {isLoadingAuth ? (
+                      <div className="flex items-center gap-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        Logging in...
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <LogIn className="h-4 w-4" />
+                        Login
+                      </div>
+                    )}
+                  </Button>
+                </form>
+              </TabsContent>
+              
+              <TabsContent value="register" className="space-y-4">
+                <form onSubmit={handleAuthSubmit} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="username">Username</Label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="username"
+                        type="text"
+                        value={formData.username}
+                        onChange={(e) => handleInputChange("username", e.target.value)}
+                        placeholder="Enter your username"
+                        className="pl-10"
+                        minLength={2}
+                        maxLength={30}
+                        required
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="email"
+                        type="email"
+                        value={formData.email}
+                        onChange={(e) => handleInputChange("email", e.target.value)}
+                        placeholder="Enter your email"
+                        className="pl-10"
+                        required
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="password">Password</Label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="password"
+                        type={showPassword ? "text" : "password"}
+                        value={formData.password}
+                        onChange={(e) => handleInputChange("password", e.target.value)}
+                        placeholder="Enter your password"
+                        className="pl-10 pr-10"
+                        minLength={6}
+                        required
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                        onClick={() => setShowPassword(!showPassword)}
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  {authError && (
+                    <Alert variant="destructive">
+                      <AlertDescription>{authError}</AlertDescription>
+                    </Alert>
+                  )}
+                  
+                  <Button type="submit" className="w-full" disabled={isLoadingAuth}>
+                    {isLoadingAuth ? (
+                      <div className="flex items-center gap-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        Creating account...
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <UserPlus className="h-4 w-4" />
+                        Register
+                      </div>
+                    )}
+                  </Button>
+                </form>
+              </TabsContent>
+            </Tabs>
           </CardContent>
         </Card>
       </div>
@@ -327,10 +523,13 @@ export default function Home() {
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2">
                 <Avatar className="h-8 w-8">
-                  <AvatarImage src={currentUser?.avatar} />
-                  <AvatarFallback>{currentUser?.username[0].toUpperCase()}</AvatarFallback>
+                  <AvatarImage src={user.avatar} />
+                  <AvatarFallback>{user.username[0].toUpperCase()}</AvatarFallback>
                 </Avatar>
-                <span className="text-sm font-medium">{currentUser?.username}</span>
+                <div className="text-sm">
+                  <p className="font-medium">{user.username}</p>
+                  <p className="text-muted-foreground">{user.email}</p>
+                </div>
               </div>
               <Button
                 variant="outline"
@@ -339,6 +538,14 @@ export default function Home() {
               >
                 <Users className="h-4 w-4 mr-2" />
                 Online ({onlineUsers.length})
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleLogout}
+              >
+                <LogOut className="h-4 w-4 mr-2" />
+                Logout
               </Button>
             </div>
           </div>
@@ -583,5 +790,13 @@ export default function Home() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function Home() {
+  return (
+    <AuthProvider>
+      <ChatApp />
+    </AuthProvider>
   )
 }

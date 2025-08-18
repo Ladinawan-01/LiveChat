@@ -1,68 +1,40 @@
-import mongoose from "mongoose"
+import mongoose from "mongoose";
 
-const MONGODB_URI = process.env.MONGODB_URI
+let isConnected = false; // global flag to avoid multiple connections
 
-// During build time, MONGODB_URI might not be available
-if (!MONGODB_URI && process.env.NODE_ENV !== 'production') {
-  console.warn("[MongoDB] MONGODB_URI not defined. Database connection will be skipped during build.")
-}
+const connectDB = async () => {
+  if (isConnected) {
+    return mongoose.connection;
+  }
 
-interface MongooseCache {
-  conn: typeof mongoose | null
-  promise: Promise<typeof mongoose> | null
-}
-
-declare global {
-  var myMongoose: MongooseCache | undefined
-}
-
-let cached = global.myMongoose
-
-if (!cached) {
-  cached = global.myMongoose = { conn: null, promise: null }
-}
-
-async function connectDB() {
-  // Skip database connection during build time if MONGODB_URI is not available
-  if (!MONGODB_URI) {
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error("Please define the MONGODB_URI environment variable inside .env.local")
-    } else {
-      console.warn("[MongoDB] Skipping database connection - MONGODB_URI not defined")
-      return null
+  // Load environment variables if not already loaded
+  if (!process.env.MONGODB_URI) {
+    try {
+      require('dotenv').config({ path: '.env.local' });
+    } catch (error) {
+      console.warn('Could not load .env.local file');
     }
   }
 
-  if (cached!.conn) {
-    console.log("[MongoDB] Using cached connection")
-    return cached!.conn
-  }
-
-  if (!cached!.promise) {
-    const opts = {
-      bufferCommands: false,
-    }
-
-    console.log("[MongoDB] Creating new connection...")
-    cached!.promise = mongoose.connect(MONGODB_URI, opts).then((mongoose) => {
-      console.log("[MongoDB] Connected successfully")
-      return mongoose
-    }).catch((error) => {
-      console.error("[MongoDB] Connection error:", error)
-      throw error
-    })
+  if (!process.env.MONGODB_URI) {
+    console.error("❌ MONGODB_URI not found in environment variables");
+    console.log("Available env vars:", Object.keys(process.env).filter(key => key.includes('MONGODB')));
+    return null;
   }
 
   try {
-    cached!.conn = await cached!.promise
-    console.log("[MongoDB] Connection established")
-  } catch (e) {
-    console.error("[MongoDB] Failed to establish connection:", e)
-    cached!.promise = null
-    throw e
+    console.log("🔍 Attempting to connect to MongoDB...");
+    console.log("🔍 MONGODB_URI length:", process.env.MONGODB_URI?.length || 0);
+    const db = await mongoose.connect(process.env.MONGODB_URI, {
+      dbName: "liveChat", // Use the correct database name
+    });
+    isConnected = true;
+    console.log("✅ Database connected:", db.connection.host);
+    return db.connection;
+  } catch (error) {
+    console.error("❌ Database connection failed:", error);
+    return null;
   }
+};
 
-  return cached!.conn
-}
-
-export default connectDB
+export default connectDB;

@@ -1,6 +1,10 @@
+// Load environment variables first
+require('dotenv').config({ path: '.env.local' })
+
 const { createServer } = require('http')
 const { parse } = require('url')
 const next = require('next')
+const mongoose = require('mongoose')
 
 const dev = process.env.NODE_ENV !== 'production'
 const hostname = 'localhost'
@@ -14,33 +18,40 @@ const handle = app.getRequestHandler()
 const connectedUsers = new Map()
 const userRooms = new Map()
 
+// Global database connection function
+const connectToDatabase = async () => {
+  if (mongoose.connection.readyState === 1) {
+    return mongoose.connection
+  }
+
+  if (!process.env.MONGODB_URI) {
+    console.error("❌ MONGODB_URI not found in environment variables")
+    return null
+  }
+
+  try {
+    console.log("🔍 Attempting to connect to MongoDB...")
+    const db = await mongoose.connect(process.env.MONGODB_URI, {
+      dbName: "liveChat",
+    })
+    console.log("✅ Database connected:", db.connection.host)
+    return db.connection
+  } catch (error) {
+    console.error("❌ Database connection failed:", error)
+    return null
+  }
+}
+
 app.prepare().then(async () => {
   // Dynamically import ES modules
-  let connectDB, Message, User, Server
+  let Message, User, Server
   
   try {
     const socketIO = await import('socket.io')
     Server = socketIO.Server
     
     // Import database modules - try different import strategies
-    let databaseModule, messageModule, userModule
-    
-    try {
-      // Try importing as ES modules first
-      databaseModule = await import('./lib/database.js')
-    } catch {
-      try {
-        databaseModule = await import('./lib/database.ts')
-      } catch {
-        try {
-          // Try with require for CommonJS
-          databaseModule = require('./lib/database.js')
-        } catch {
-          console.log('Database module not found, using fallback')
-          databaseModule = { default: () => null }
-        }
-      }
-    }
+    let messageModule, userModule
     
     try {
       messageModule = await import('./models/Message.js')
@@ -72,13 +83,24 @@ app.prepare().then(async () => {
       }
     }
     
-    connectDB = databaseModule.default || databaseModule
     Message = messageModule.default || messageModule
     User = userModule.default || userModule
     
     console.log('✅ All modules loaded successfully')
+    console.log('🔍 Environment check:')
+    console.log('  - NODE_ENV:', process.env.NODE_ENV)
+    console.log('  - MONGODB_URI:', process.env.MONGODB_URI ? 'Set' : 'Not set')
+
+    // Connect to database immediately
+    const db = await connectToDatabase()
+    if (!db) {
+      throw new Error('Failed to connect to database')
+    }
+
+    console.log('✅ Database connected and verified successfully')
+
   } catch (error) {
-    console.error('Error importing modules:', error)
+    console.error('Error importing modules or connecting to database:', error)
     console.log('Starting server without Socket.IO support...')
   }
 
@@ -95,7 +117,7 @@ app.prepare().then(async () => {
   })
 
   // Initialize Socket.IO if modules are available
-  if (Server && connectDB && Message && User) {
+  if (Server && Message && User) {
     const io = new Server(server, {
       cors: {
         origin: process.env.NODE_ENV === "production" 
@@ -116,16 +138,22 @@ app.prepare().then(async () => {
         connected: true, 
         message: "Connected to chat server" 
       })
-
+ 
       // Handle user joining
       socket.on("user:join", async (data) => {
         try {
-          const db = await connectDB()
+          console.log("[Socket.IO] Verifying database connection...")
           
-          if (!db) {
-            console.warn("[Socket.IO] Database not available")
-            return
+          // Check MongoDB connection state
+          if (mongoose.connection.readyState !== 1) {
+            console.warn("[Socket.IO] MongoDB connection lost, attempting to reconnect...")
+            const db = await connectToDatabase()
+            if (!db) {
+              throw new Error('Failed to reconnect to database')
+            }
           }
+          
+          console.log("[Socket.IO] Database connection verified")
 
           const { userId, username, avatar } = data
 
@@ -233,11 +261,13 @@ app.prepare().then(async () => {
         try {
           console.log("[Socket.IO] Received message data:", data)
           
-          const db = await connectDB()
-          
-          if (!db) {
-            console.warn("[Socket.IO] Database not available")
-            return
+          // Verify database connection before proceeding
+          if (mongoose.connection.readyState !== 1) {
+            console.warn("[Socket.IO] Database connection lost, attempting to reconnect...")
+            const db = await connectToDatabase()
+            if (!db) {
+              throw new Error('Failed to reconnect to database')
+            }
           }
 
           const { sender, receiver, room, text } = data
@@ -336,10 +366,9 @@ app.prepare().then(async () => {
       try {
         const user = connectedUsers.get(socketId)
         if (user) {
-          const db = await connectDB()
-          
-          if (!db) {
-            console.warn("[Socket.IO] Database not available")
+          // Check MongoDB connection state
+          if (mongoose.connection.readyState !== 1) {
+            console.warn("[Socket.IO] Database connection lost during disconnect")
             return
           }
 
