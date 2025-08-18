@@ -89,7 +89,6 @@ function ChatApp() {
   const [rooms, setRooms] = useState<Room[]>([])
   const [showRooms, setShowRooms] = useState(true)
   const [roomSearch, setRoomSearch] = useState("")
-  const [isCreatingRoom, setIsCreatingRoom] = useState(false)
   const [roomError, setRoomError] = useState("")
   
   // Enhanced message management
@@ -291,7 +290,14 @@ function ChatApp() {
       setRooms(prev => {
         const existing = prev.find(r => r.name === data.room)
         if (!existing) {
-          return [...prev, { name: data.room, userCount: 1, isJoined: true, isPrivate: false }]
+          return [...prev, { 
+            name: data.room, 
+            userCount: 1, 
+            isJoined: true, 
+            isPrivate: false,
+            createdBy: currentUser?.username || "Unknown",
+            createdAt: new Date()
+          }]
         }
         return prev.map(room => 
           room.name === data.room 
@@ -299,6 +305,8 @@ function ChatApp() {
             : room
         )
       })
+      setCurrentRoom(data.room)
+      setRoomError("")
     })
 
     newSocket.on("userTyping", (data) => {
@@ -364,20 +372,6 @@ function ChatApp() {
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }))
     setAuthError("")
-  }
-
-  // Handle creating room
-  const handleCreateRoom = () => {
-    if (!roomInput.trim() || !socket) return
-
-    setIsCreatingRoom(true)
-    socket.emit("createRoom", {
-      roomName: roomInput.trim(),
-      isPrivate: false
-    })
-    
-    setRoomInput("")
-    setIsCreatingRoom(false)
   }
 
   // Handle switching to a room
@@ -770,8 +764,6 @@ function ChatApp() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-             
-
                 {roomError && (
                   <Alert variant="destructive">
                     <AlertDescription>{roomError}</AlertDescription>
@@ -795,7 +787,6 @@ function ChatApp() {
                       <div className="space-y-2">
                         {/* Joined Rooms */}
                         <div className="space-y-1">
-                          {/* <Label className="text-xs font-medium text-muted-foreground">JOINED ROOMS</Label> */}
                           {filteredRooms
                             .filter(room => room.name === currentRoom || room.name === "general")
                             .map((room) => (
@@ -849,44 +840,6 @@ function ChatApp() {
                               </div>
                             ))}
                         </div>
-
-                        {/* Available Rooms */}
-                        {/* <div className="space-y-1">
-                          <Label className="text-xs font-medium text-muted-foreground">AVAILABLE ROOMS</Label>
-                          {filteredRooms
-                            .filter(roo m => room.name !== currentRoom && room.name !== "general")
-                            .map((room) => (
-                              <div
-                                key={room.name}
-                                className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-100 transition-colors"
-                              >
-                                <div className="flex items-center gap-2 flex-1">
-                                  {room.isPrivate && <Shield className="h-4 w-4 text-purple-500" />}
-                                  <Hash className="h-4 w-4 text-muted-foreground" />
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium truncate">{room.name}</p>
-                                    <div className="flex items-center gap-2">
-                                      <p className="text-xs text-muted-foreground">
-                                        {room.userCount} user{room.userCount !== 1 ? 's' : ''}
-                                      </p>
-                                      <p className="text-xs text-muted-foreground">
-                                        by {room.createdBy}
-                                      </p>
-                                    </div>
-                                  </div>
-                                </div>
-                                
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-6 px-2"
-                                  onClick={() => handleJoinRoom(room.name)}
-                                >
-                                  <UserPlus className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            ))}
-                        </div> */}
 
                         {filteredRooms.length === 0 && (
                           <div className="text-center py-4 text-muted-foreground">
