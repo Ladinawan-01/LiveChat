@@ -94,8 +94,8 @@ MONGODB_URI=mongodb://localhost:27017/live-chat
 # For MongoDB Atlas: mongodb+srv://username:password@cluster.mongodb.net/live-chat
 
 # Application Configuration
-NEXT_PUBLIC_APP_URL=http://localhost:3000
-NEXT_PUBLIC_SOCKET_URL=http://localhost:3000
+NEXT_PUBLIC_APP_URL=https://live-chat-gamma-black.vercel.app/
+NEXT_PUBLIC_SOCKET_URL=https://live-chat-gamma-black.vercel.app/
 
 # Environment
 NODE_ENV=development
@@ -113,7 +113,7 @@ npm run dev
 ```
 
 6. **Open your browser**
-Navigate to [http://localhost:3000](http://localhost:3000)
+Navigate to [https://live-chat-gamma-black.vercel.app/](https://live-chat-gamma-black.vercel.app/)
 
 ## 📱 Usage
 

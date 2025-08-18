@@ -4,7 +4,7 @@ const io = require('socket.io-client')
 console.log('🧪 Testing LiveChat Pro...')
 
 // Test Socket.IO connection
-const socket = io('http://localhost:3000')
+const socket = io('https://live-chat-gamma-black.vercel.app/')
 
 socket.on('connect', () => {
   console.log('✅ Connected to server')

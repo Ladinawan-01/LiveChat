@@ -63,7 +63,7 @@ export default function Home() {
 
   // Initialize Socket.IO connection
   useEffect(() => {
-    const socketInstance = io("http://localhost:3000")
+    const socketInstance = io("https://live-chat-gamma-black.vercel.app/")
     setSocket(socketInstance)
 
     socketInstance.on("connect", () => {

@@ -62,7 +62,7 @@ NEXT_PUBLIC_SOCKET_URL=your-socket-io-cloud-url
 
 2. **Update socket-client.ts:**
 ```typescript
-const serverUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3000"
+const serverUrl = process.env.NEXT_PUBLIC_SOCKET_URL || "https://live-chat-gamma-black.vercel.app/"
 ```
 
 3. **Deploy to Vercel:**

@@ -40,7 +40,7 @@ export const initializeSocket = (server: NetServer) => {
     path: "/api/socket",
     addTrailingSlash: false,
     cors: {
-      origin: process.env.NODE_ENV === "production" ? false : ["http://localhost:3000"],
+      origin: process.env.NODE_ENV === "production" ? false : ["https://live-chat-gamma-black.vercel.app/"],
       methods: ["GET", "POST"],
     },
   })

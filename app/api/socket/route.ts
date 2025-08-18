@@ -35,7 +35,7 @@ function initializeSocketIO() {
     cors: {
       origin: process.env.NODE_ENV === "production" 
         ? process.env.NEXT_PUBLIC_APP_URL || "*"
-        : ["http://localhost:3000", "http://127.0.0.1:3000"],
+        : ["https://live-chat-gamma-black.vercel.app/", "http://127.0.0.1:3000"],
       methods: ["GET", "POST"],
       credentials: true
     },

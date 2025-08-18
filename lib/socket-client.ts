@@ -22,12 +22,12 @@ class SocketClient {
       if (typeof window !== 'undefined') {
         // Client-side: use current origin for production, localhost for development
         const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-        serverUrl = isLocalhost ? "http://localhost:3000" : window.location.origin
+        serverUrl = isLocalhost ? "https://live-chat-gamma-black.vercel.app/" : window.location.origin
       } else {
         // Server-side: use environment variable or default
         serverUrl = process.env.NODE_ENV === "production" 
           ? process.env.NEXT_PUBLIC_APP_URL || "https://live-chat-gamma-black.vercel.app"
-          : "http://localhost:3000"
+          : "https://live-chat-gamma-black.vercel.app/"
       }
 
       console.log("[Socket.IO Client] Connecting to:", serverUrl)

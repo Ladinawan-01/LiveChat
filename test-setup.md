@@ -14,7 +14,7 @@
 3. **Environment Variables**: Create `.env.local` file
    ```env
    MONGODB_URI=mongodb://localhost:27017/live-chat
-   NEXT_PUBLIC_APP_URL=http://localhost:3000
+   NEXT_PUBLIC_APP_URL=https://live-chat-gamma-black.vercel.app/
    NODE_ENV=development
    ```
 
@@ -31,7 +31,7 @@
    ```
 
 3. **Open Browser**
-   Navigate to: http://localhost:3000
+   Navigate to: https://live-chat-gamma-black.vercel.app/
 
 ## Testing the Application
 
@@ -65,17 +65,17 @@
 
 ### Test Messages API
 ```bash
-curl http://localhost:3000/api/messages
+curl https://live-chat-gamma-black.vercel.app//api/messages
 ```
 
 ### Test Users API
 ```bash
-curl http://localhost:3000/api/users
+curl https://live-chat-gamma-black.vercel.app//api/users
 ```
 
 ### Test Socket.IO Status
 ```bash
-curl http://localhost:3000/api/socket
+curl https://live-chat-gamma-black.vercel.app//api/socket
 ```
 
 ## Common Issues & Solutions
