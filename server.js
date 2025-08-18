@@ -18,6 +18,16 @@ const handle = app.getRequestHandler()
 const connectedUsers = new Map()
 const userRooms = new Map()
 
+// Global room management
+const globalRooms = new Map()
+globalRooms.set("general", {
+  name: "general",
+  userCount: 0,
+  createdBy: "system",
+  createdAt: new Date(),
+  isPrivate: false
+})
+
 // Global database connection function
 const connectToDatabase = async () => {
   if (mongoose.connection.readyState === 1) {
@@ -131,6 +141,41 @@ const createUserModel = () => {
   return mongoose.models.User || mongoose.model('User', UserSchema)
 }
 
+// Function to get all rooms with user counts
+const getAllRooms = () => {
+  const rooms = []
+  for (const [roomName, roomData] of globalRooms) {
+    rooms.push({
+      name: roomName,
+      userCount: roomData.userCount,
+      createdBy: roomData.createdBy,
+      createdAt: roomData.createdAt,
+      isPrivate: roomData.isPrivate
+    })
+  }
+  return rooms.sort((a, b) => {
+    // General room first, then by creation date
+    if (a.name === "general") return -1
+    if (b.name === "general") return 1
+    return b.createdAt - a.createdAt
+  })
+}
+
+// Function to update room user count
+const updateRoomUserCount = (roomName, increment = 1) => {
+  if (globalRooms.has(roomName)) {
+    const room = globalRooms.get(roomName)
+    room.userCount = Math.max(0, room.userCount + increment)
+    globalRooms.set(roomName, room)
+  }
+}
+
+// Function to check if user is in room
+const isUserInRoom = (socketId, roomName) => {
+  const userRoomsList = userRooms.get(socketId) || []
+  return userRoomsList.includes(roomName)
+}
+
 app.prepare().then(async () => {
   // Dynamically import ES modules
   let Server
@@ -242,6 +287,7 @@ app.prepare().then(async () => {
           // Join user to general room
           socket.join("general")
           userRooms.set(socket.id, ["general"])
+          updateRoomUserCount("general", 1)
           
           console.log("[Socket.IO] User joined general room:", username)
 
@@ -251,6 +297,10 @@ app.prepare().then(async () => {
           // Send current online users to the new user
           const onlineUsers = Array.from(connectedUsers.values())
           socket.emit("users:online", onlineUsers)
+
+          // Send all available rooms to the new user
+          const allRooms = getAllRooms()
+          socket.emit("rooms:list", allRooms)
 
           console.log("[Socket.IO] User joined:", username)
           console.log("[Socket.IO] Total connected users:", connectedUsers.size)
@@ -263,58 +313,236 @@ app.prepare().then(async () => {
         }
       })
 
-      // Join Room
-      socket.on("joinRoom", async (room) => {
+      // Get all rooms
+      socket.on("getRooms", () => {
+        const allRooms = getAllRooms()
+        socket.emit("rooms:list", allRooms)
+      })
+
+      // Create new room
+      socket.on("createRoom", (roomData) => {
         try {
           const user = connectedUsers.get(socket.id)
           if (!user) return
 
-          socket.join(room)
+          const { roomName, isPrivate = false } = roomData
+
+          if (!roomName || roomName.trim() === "") {
+            socket.emit("roomError", { message: "Room name is required" })
+            return
+          }
+
+          const trimmedRoomName = roomName.trim()
+
+          // Check if room already exists
+          if (globalRooms.has(trimmedRoomName)) {
+            socket.emit("roomError", { message: "Room already exists" })
+            return
+          }
+
+          // Create new room
+          const newRoom = {
+            name: trimmedRoomName,
+            userCount: 0,
+            createdBy: user.username,
+            createdAt: new Date(),
+            isPrivate: isPrivate
+          }
+
+          globalRooms.set(trimmedRoomName, newRoom)
+
+          // Broadcast new room to all users
+          io.emit("roomCreated", newRoom)
+
+          console.log(`[Socket.IO] Room created: ${trimmedRoomName} by ${user.username}`)
+        } catch (error) {
+          console.error("[Socket.IO] Error creating room:", error)
+          socket.emit("roomError", { message: "Failed to create room" })
+        }
+      })
+
+      // Join Room
+      socket.on("joinRoom", async (roomName) => {
+        try {
+          const user = connectedUsers.get(socket.id)
+          if (!user) return
+
+          const trimmedRoomName = roomName.trim()
+
+          // Check if room exists
+          if (!globalRooms.has(trimmedRoomName)) {
+            socket.emit("roomError", { message: "Room does not exist" })
+            return
+          }
+
+          // Check if user is already in the room
+          if (isUserInRoom(socket.id, trimmedRoomName)) {
+            socket.emit("roomError", { message: "Already in this room" })
+            return
+          }
+
+          socket.join(trimmedRoomName)
           
           // Track user's rooms
           const userCurrentRooms = userRooms.get(socket.id) || []
-          if (!userCurrentRooms.includes(room)) {
-            userCurrentRooms.push(room)
-            userRooms.set(socket.id, userCurrentRooms)
-          }
+          userCurrentRooms.push(trimmedRoomName)
+          userRooms.set(socket.id, userCurrentRooms)
           
-          console.log(`User ${user.username} joined room: ${room}`)
+          // Update room user count
+          updateRoomUserCount(trimmedRoomName, 1)
+          
+          console.log(`User ${user.username} joined room: ${trimmedRoomName}`)
           
           // Notify others in the room
-          socket.to(room).emit("userJoinedRoom", {
+          socket.to(trimmedRoomName).emit("userJoinedRoom", {
             user: user.username,
-            room: room
+            room: trimmedRoomName
           })
           
           // Send room info to user
           socket.emit("roomJoined", {
-            room: room,
-            message: `Joined room: ${room}`
+            room: trimmedRoomName,
+            message: `Joined room: ${trimmedRoomName}`
           })
+
+          // Load room messages from database
+          try {
+            const Message = createMessageModel()
+            const roomMessages = await Message.find({ room: trimmedRoomName })
+              .sort({ timestamp: 1 })
+              .limit(100)
+              .lean()
+
+            console.log(`[Socket.IO] Loaded ${roomMessages.length} messages for room: ${trimmedRoomName}`)
+            
+            // Send room messages to the user
+            socket.emit("roomMessages", {
+              room: trimmedRoomName,
+              messages: roomMessages
+            })
+          } catch (dbError) {
+            console.error("[Socket.IO] Error loading room messages:", dbError)
+          }
+
+          // Broadcast updated room list to all users
+          const allRooms = getAllRooms()
+          io.emit("rooms:list", allRooms)
         } catch (error) {
           console.error("[Socket.IO] Error joining room:", error)
+          socket.emit("roomError", { message: "Failed to join room" })
+        }
+      })
+
+      // Load room messages (for when user switches rooms)
+      socket.on("loadRoomMessages", async (roomName) => {
+        try {
+          const user = connectedUsers.get(socket.id)
+          if (!user) return
+
+          const trimmedRoomName = roomName.trim()
+
+          // Check if user is in the room
+          if (!isUserInRoom(socket.id, trimmedRoomName)) {
+            socket.emit("roomError", { message: "Not in this room" })
+            return
+          }
+
+          // Load room messages from database
+          const Message = createMessageModel()
+          const roomMessages = await Message.find({ room: trimmedRoomName })
+            .sort({ timestamp: 1 })
+            .limit(100)
+            .lean()
+
+          console.log(`[Socket.IO] Loaded ${roomMessages.length} messages for room: ${trimmedRoomName}`)
+          
+          // Send room messages to the user
+          socket.emit("roomMessages", {
+            room: trimmedRoomName,
+            messages: roomMessages
+          })
+        } catch (error) {
+          console.error("[Socket.IO] Error loading room messages:", error)
+          socket.emit("roomError", { message: "Failed to load messages" })
+        }
+      })
+
+      // Load private messages
+      socket.on("loadPrivateMessages", async (otherUserId) => {
+        try {
+          const user = connectedUsers.get(socket.id)
+          if (!user) return
+
+          // Load private messages from database
+          const Message = createMessageModel()
+          const privateMessages = await Message.find({
+            $or: [
+              { sender: user.userId, receiver: otherUserId },
+              { sender: otherUserId, receiver: user.userId }
+            ]
+          })
+            .sort({ timestamp: 1 })
+            .limit(100)
+            .lean()
+
+          console.log(`[Socket.IO] Loaded ${privateMessages.length} private messages between ${user.userId} and ${otherUserId}`)
+          
+          // Send private messages to the user
+          socket.emit("privateMessages", {
+            otherUserId: otherUserId,
+            messages: privateMessages
+          })
+        } catch (error) {
+          console.error("[Socket.IO] Error loading private messages:", error)
+          socket.emit("roomError", { message: "Failed to load private messages" })
         }
       })
 
       // Leave Room
-      socket.on("leaveRoom", (room) => {
-        const user = connectedUsers.get(socket.id)
-        if (!user) return
+      socket.on("leaveRoom", (roomName) => {
+        try {
+          const user = connectedUsers.get(socket.id)
+          if (!user) return
 
-        socket.leave(room)
-        
-        // Remove from user's rooms
-        const userCurrentRooms = userRooms.get(socket.id) || []
-        const updatedRooms = userCurrentRooms.filter(r => r !== room)
-        userRooms.set(socket.id, updatedRooms)
-        
-        console.log(`User ${user.username} left room: ${room}`)
-        
-        // Notify others in the room
-        socket.to(room).emit("userLeftRoom", {
-          user: user.username,
-          room: room
-        })
+          const trimmedRoomName = roomName.trim()
+
+          // Check if user is in the room
+          if (!isUserInRoom(socket.id, trimmedRoomName)) {
+            socket.emit("roomError", { message: "Not in this room" })
+            return
+          }
+
+          // Cannot leave general room
+          if (trimmedRoomName === "general") {
+            socket.emit("roomError", { message: "Cannot leave general room" })
+            return
+          }
+
+          socket.leave(trimmedRoomName)
+          
+          // Remove from user's rooms
+          const userCurrentRooms = userRooms.get(socket.id) || []
+          const updatedRooms = userCurrentRooms.filter(r => r !== trimmedRoomName)
+          userRooms.set(socket.id, updatedRooms)
+          
+          // Update room user count
+          updateRoomUserCount(trimmedRoomName, -1)
+          
+          console.log(`User ${user.username} left room: ${trimmedRoomName}`)
+          
+          // Notify others in the room
+          socket.to(trimmedRoomName).emit("userLeftRoom", {
+            user: user.username,
+            room: trimmedRoomName
+          })
+
+          // Broadcast updated room list to all users
+          const allRooms = getAllRooms()
+          io.emit("rooms:list", allRooms)
+        } catch (error) {
+          console.error("[Socket.IO] Error leaving room:", error)
+          socket.emit("roomError", { message: "Failed to leave room" })
+        }
       })
 
       // Send Message (Group Chat)
@@ -448,9 +676,10 @@ app.prepare().then(async () => {
             }
           )
 
-          // Notify all rooms user was in
+          // Remove user from all rooms and update counts
           const userCurrentRooms = userRooms.get(socketId) || []
           userCurrentRooms.forEach(room => {
+            updateRoomUserCount(room, -1)
             io.to(room).emit("userLeftRoom", {
               user: user.username,
               room: room
@@ -463,6 +692,10 @@ app.prepare().then(async () => {
 
           // Broadcast user left
           io.emit("user:left", user)
+
+          // Broadcast updated room list to all users
+          const allRooms = getAllRooms()
+          io.emit("rooms:list", allRooms)
 
           console.log("🔴 User disconnected:", user.username)
         }
