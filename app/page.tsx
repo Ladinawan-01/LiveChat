@@ -33,6 +33,7 @@ import {
   Shield
 } from "lucide-react"
 import { AuthProvider, useAuth } from "@/contexts/AuthContext"
+import { EmojiPickerComponent } from "@/components/emoji-picker"
 
 interface Message {
   _id: string
@@ -492,6 +493,11 @@ function ChatApp() {
     }
   }
 
+  // Handle emoji selection
+  const handleEmojiClick = (emoji: string) => {
+    setMessage(prev => prev + emoji)
+  }
+
   // Handle logout
   const handleLogout = () => {
     if (socket) {
@@ -805,9 +811,7 @@ function ChatApp() {
                                   <div className="flex-1 min-w-0">
                                     <p className="text-sm font-medium truncate">{room.name}</p>
                                     <div className="flex items-center gap-2">
-                                      <p className="text-xs text-muted-foreground">
-                                        {room.userCount} user{room.userCount !== 1 ? 's' : ''}
-                                      </p>
+                                      
                                       {room.createdBy !== "system" && (
                                         <p className="text-xs text-muted-foreground">
                                           by {room.createdBy}
@@ -1061,6 +1065,7 @@ function ChatApp() {
               {/* Message Input */}
               <div className="border-t p-4">
                 <div className="flex gap-2">
+                  <EmojiPickerComponent onEmojiClick={handleEmojiClick} />
                   <Input
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
